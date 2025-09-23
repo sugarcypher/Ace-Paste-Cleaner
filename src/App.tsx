@@ -8,6 +8,7 @@ import { SecurityPolicy } from "./components/SecurityPolicy";
 import { PrivacyAgreement } from "./components/PrivacyAgreement";
 import { SecurityProvider, useSecurity } from "./contexts/SecurityContext";
 import { stripInvisibleCharacters } from "./utils/advancedInvisibleCharacters";
+import { GumroadWebhookHandler } from "./components/GumroadWebhookHandler";
 
 interface CleanOptions {
   removeInvisible: boolean;
@@ -32,6 +33,13 @@ interface CleanOptions {
   removeEmptyLines: boolean;
   removeTrailingSpaces: boolean;
   removeLeadingSpaces: boolean;
+  // New features from README
+  caseConversion: 'none' | 'lowercase' | 'uppercase' | 'titlecase' | 'sentencecase';
+  removeUTMParameters: boolean;
+  markdownSafeMode: boolean;
+  preserveCodeFences: boolean;
+  preserveTabsSpaces: boolean;
+  preserveEscapeSequences: boolean;
 }
 
 
@@ -79,10 +87,23 @@ function AppContent() {
     removeEmptyLines: false,
     removeTrailingSpaces: false,
     removeLeadingSpaces: false,
+    // New features
+    caseConversion: 'none',
+    removeUTMParameters: false,
+    markdownSafeMode: false,
+    preserveCodeFences: false,
+    preserveTabsSpaces: false,
+    preserveEscapeSequences: false,
   });
 
   function toggle(key: keyof CleanOptions) {
-    setOpts((o) => ({ ...o, [key]: !o[key] }));
+    setOpts((o) => {
+      const currentValue = o[key];
+      if (typeof currentValue === 'boolean') {
+        return { ...o, [key]: !currentValue };
+      }
+      return o;
+    });
   }
 
   const cleaned = useMemo(() => {
@@ -185,7 +206,7 @@ function AppContent() {
         <SecurityBadge />
 
         {/* Options Dropdowns */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <OptionGroup 
             title="Text Formatting" 
             options={[
@@ -229,6 +250,35 @@ function AppContent() {
             opts={opts}
             toggle={toggle}
           />
+
+          <OptionGroup 
+            title="Advanced Features" 
+            options={[
+              { key: 'removeUTMParameters', label: 'Remove UTM Parameters' },
+              { key: 'markdownSafeMode', label: 'Markdown Safe Mode' },
+              { key: 'preserveCodeFences', label: 'Preserve Code Fences' },
+              { key: 'preserveTabsSpaces', label: 'Preserve Tabs/Spaces' },
+              { key: 'preserveEscapeSequences', label: 'Preserve Escape Sequences' }
+            ]}
+            opts={opts}
+            toggle={toggle}
+          />
+        </div>
+
+        {/* Case Conversion Dropdown */}
+        <div className="mb-6">
+          <label className="block text-sm uppercase tracking-wider text-neutral-400 mb-2">Case Conversion</label>
+          <select
+            value={opts.caseConversion}
+            onChange={(e) => setOpts(prev => ({ ...prev, caseConversion: e.target.value as any }))}
+            className="w-full md:w-64 px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          >
+            <option value="none">No conversion</option>
+            <option value="lowercase">lowercase</option>
+            <option value="uppercase">UPPERCASE</option>
+            <option value="titlecase">Title Case</option>
+            <option value="sentencecase">Sentence case</option>
+          </select>
         </div>
 
         {/* Input and Output - Stacked Vertically */}
@@ -408,13 +458,6 @@ function AppContent() {
   );
 }
 
-export default function App() {
-  return (
-    <SecurityProvider>
-      <AppContent />
-    </SecurityProvider>
-  );
-}
 
 
 interface OptionGroupProps {
@@ -454,17 +497,23 @@ function OptionGroup({ title, options, opts, toggle }: OptionGroupProps) {
       
       {isOpen && (
         <div className="absolute top-full left-0 right-0 mt-2 p-2 bg-neutral-800 border border-neutral-700 rounded-xl shadow-lg z-10 max-h-64 overflow-y-auto">
-          {options.map((option) => (
-            <label key={option.key} className="flex items-center gap-3 p-2 rounded-lg hover:bg-neutral-700 cursor-pointer select-none">
-              <input 
-                type="checkbox" 
-                className="size-4 accent-emerald-500" 
-                checked={opts[option.key]} 
-                onChange={() => toggle(option.key)} 
-              />
-              <span className="text-sm text-neutral-200">{option.label}</span>
-            </label>
-          ))}
+          {options.map((option) => {
+            const value = opts[option.key];
+            const isBoolean = typeof value === 'boolean';
+            
+            return (
+              <label key={option.key} className="flex items-center gap-3 p-2 rounded-lg hover:bg-neutral-700 cursor-pointer select-none">
+                <input 
+                  type="checkbox" 
+                  className="size-4 accent-emerald-500" 
+                  checked={isBoolean ? value : false}
+                  onChange={() => isBoolean ? toggle(option.key) : undefined}
+                  disabled={!isBoolean}
+                />
+                <span className="text-sm text-neutral-200">{option.label}</span>
+              </label>
+            );
+          })}
         </div>
       )}
     </div>
@@ -827,11 +876,11 @@ function cleanText(text: string, opts: CleanOptions): string {
     t = t.replace(/[\u{E0000}-\u{E007F}]/gu, ""); // Plane-14 TAG characters
   }
 
-  if (opts.stripMarkdownHeaders) {
+  if (opts.stripMarkdownHeaders && !opts.markdownSafeMode) {
     t = t.replace(/^\s{0,3}(#{1,6})\s+/gmu, "");
   }
 
-  if (opts.stripBoldItalic) {
+  if (opts.stripBoldItalic && !opts.markdownSafeMode) {
     // Bold/italic markers; keep inner text
     t = t.replace(/\*\*(.*?)\*\*/gmsu, "$1");
     t = t.replace(/__(.*?)__/gmsu, "$1");
@@ -840,7 +889,7 @@ function cleanText(text: string, opts: CleanOptions): string {
     t = t.replace(/~~(.*?)~~/gmsu, "$1");
   }
 
-  if (opts.stripBackticks) {
+  if (opts.stripBackticks && !opts.markdownSafeMode && !opts.preserveCodeFences) {
     // Fenced blocks: remove the backticks but keep content
     t = t.replace(/^```[^\n]*\n([\s\S]*?)\n```\s*$/gmu, "$1\n");
     // Inline backticks
@@ -862,7 +911,7 @@ function cleanText(text: string, opts: CleanOptions): string {
     t = t.replace(/^\s{0,3}>\s?/gmu, "");
   }
 
-  if (opts.normalizeWhitespace) {
+  if (opts.normalizeWhitespace && !opts.preserveTabsSpaces) {
     // Inside normalizeWhitespace:
     t = t.replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, " "); // all Zs spaces → ASCII space
     // Collapse 2+ spaces to 1 (but not across newlines)
@@ -895,7 +944,7 @@ function cleanText(text: string, opts: CleanOptions): string {
     t = t.replace(/\b\d{4}-\d{2}-\d{2}\b/g, "");
   }
 
-  if (opts.removeSpecialCharacters) {
+  if (opts.removeSpecialCharacters && !opts.preserveEscapeSequences) {
     // Only remove truly special characters, preserve basic punctuation
     t = t.replace(/[!@#$%^&*_+=\[\]{}|\\:"'<>~`]/g, "");
   }
@@ -921,6 +970,33 @@ function cleanText(text: string, opts: CleanOptions): string {
 
   if (opts.removeLeadingSpaces) {
     t = t.replace(/^[ \t]+/gm, "");
+  }
+
+  // New features implementation
+  if (opts.removeUTMParameters) {
+    // Remove UTM parameters from URLs
+    t = t.replace(/([?&])(utm_[^&\s]*)/g, '$1');
+    t = t.replace(/([?&])(fbclid|gclid|msclkid)[^&\s]*/g, '$1');
+    t = t.replace(/[?&]$/, ''); // Remove trailing ? or &
+  }
+
+
+  // Case conversion
+  if (opts.caseConversion !== 'none') {
+    switch (opts.caseConversion) {
+      case 'lowercase':
+        t = t.toLowerCase();
+        break;
+      case 'uppercase':
+        t = t.toUpperCase();
+        break;
+      case 'titlecase':
+        t = t.replace(/\b\w/g, (char) => char.toUpperCase());
+        break;
+      case 'sentencecase':
+        t = t.replace(/(^|[.!?]\s+)([a-z])/g, (_, prefix, char) => prefix + char.toUpperCase());
+        break;
+    }
   }
 
   // Restore protected emoji joiners
@@ -956,3 +1032,18 @@ function countInvisibles(text: string) {
   }
   return c;
 }
+
+function App() {
+  return (
+    <SecurityProvider>
+      <div className="min-h-screen bg-neutral-900 text-white">
+        <GumroadWebhookHandler />
+        <div className="container mx-auto px-4 py-8 max-w-6xl">
+          <AppContent />
+        </div>
+      </div>
+    </SecurityProvider>
+  );
+}
+
+export default App;

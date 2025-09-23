@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { UsageStats, User, PRICING_TIERS } from '../types/pricing';
+import { subscriptionManager } from '../utils/subscriptionManager';
 
 const STORAGE_KEY = 'acepaste_user_data';
 const USAGE_KEY = 'acepaste_usage';
@@ -16,20 +17,29 @@ export function useUsage() {
         const storedUser = localStorage.getItem(STORAGE_KEY);
         const storedUsage = localStorage.getItem(USAGE_KEY);
         
+        // Check for active subscription first
+        const activeSubscription = subscriptionManager.getActiveSubscription();
+        const subscriptionTier = activeSubscription ? activeSubscription.tier : 'free';
+        
         if (storedUser) {
           const userData = JSON.parse(storedUser);
+          // Update tier if subscription is active
+          if (activeSubscription && userData.tier !== subscriptionTier) {
+            userData.tier = subscriptionTier;
+            userData.usage.currentTier = subscriptionTier;
+          }
           setUser(userData);
         } else {
           // Create anonymous user
           const anonymousUser: User = {
             id: `anon_${Date.now()}`,
             email: '',
-            tier: 'free',
+            tier: subscriptionTier,
             usage: {
               dailyCleanings: 0,
               totalCleanings: 0,
               lastResetDate: new Date().toISOString().split('T')[0],
-              currentTier: 'free'
+              currentTier: subscriptionTier
             }
           };
           setUser(anonymousUser);
@@ -172,6 +182,33 @@ export function useUsage() {
     localStorage.setItem(USAGE_KEY, JSON.stringify(updatedUser.usage));
   }, [user]);
 
+  const handleGumroadWebhook = useCallback((webhookData: any) => {
+    try {
+      const subscription = subscriptionManager.createFromGumroadWebhook(webhookData);
+      subscriptionManager.setSubscription(subscription);
+      
+      // Update user with new subscription
+      if (user) {
+        const updatedUser = {
+          ...user,
+          tier: subscription.tier,
+          email: webhookData.email || user.email,
+          usage: {
+            ...user.usage,
+            currentTier: subscription.tier
+          }
+        };
+        
+        setUser(updatedUser);
+        setUsage(updatedUser.usage);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
+        localStorage.setItem(USAGE_KEY, JSON.stringify(updatedUser.usage));
+      }
+    } catch (error) {
+      console.error('Error processing Gumroad webhook:', error);
+    }
+  }, [user]);
+
   return {
     user,
     usage,
@@ -179,7 +216,8 @@ export function useUsage() {
     recordCleaning,
     canClean,
     getRemainingCleanings,
-    upgradeUser
+    upgradeUser,
+    handleGumroadWebhook
   };
 }
 
