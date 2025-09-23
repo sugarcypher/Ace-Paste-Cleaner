@@ -97,7 +97,15 @@ function AppContent() {
 
   const handleClean = () => {
     if (!canClean(input.length)) {
-      if (input.length > 2000) {
+      // Check character limits based on tier
+      const maxLength = user?.tier === 'free' ? 2000 :
+                       user?.tier === 'monthly' ? 50000 :
+                       user?.tier === 'quarterly' ? 200000 :
+                       user?.tier === 'six_months' ? 500000 :
+                       user?.tier === 'yearly' ? 1000000 :
+                       user?.tier === 'two_years' ? 2000000 : 2000000;
+      
+      if (input.length > maxLength) {
         setPaywallReason('text_length');
       } else {
         setPaywallReason('daily_limit');
@@ -235,9 +243,29 @@ function AppContent() {
                       <span className={input.length > 2000 ? 'text-red-400' : 'text-neutral-400'}>
                         {input.length.toLocaleString()} / 2,000 chars
                       </span>
-                    ) : (
+                    ) : user.tier === 'monthly' ? (
+                      <span className={input.length > 50000 ? 'text-red-400' : 'text-neutral-400'}>
+                        {input.length.toLocaleString()} / 50,000 chars
+                      </span>
+                    ) : user.tier === 'quarterly' ? (
+                      <span className={input.length > 200000 ? 'text-red-400' : 'text-neutral-400'}>
+                        {input.length.toLocaleString()} / 200,000 chars
+                      </span>
+                    ) : user.tier === 'six_months' ? (
+                      <span className={input.length > 500000 ? 'text-red-400' : 'text-neutral-400'}>
+                        {input.length.toLocaleString()} / 500,000 chars
+                      </span>
+                    ) : user.tier === 'yearly' ? (
                       <span className={input.length > 1000000 ? 'text-red-400' : 'text-neutral-400'}>
                         {input.length.toLocaleString()} / 1,000,000 chars
+                      </span>
+                    ) : user.tier === 'two_years' ? (
+                      <span className={input.length > 2000000 ? 'text-red-400' : 'text-neutral-400'}>
+                        {input.length.toLocaleString()} / 2,000,000 chars
+                      </span>
+                    ) : (
+                      <span className={input.length > 2000000 ? 'text-red-400' : 'text-neutral-400'}>
+                        {input.length.toLocaleString()} / 2,000,000 chars
                       </span>
                     )}
                   </div>
