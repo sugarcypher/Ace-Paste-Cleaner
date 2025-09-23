@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useUsage } from "./hooks/useUsage";
 import { PaywallModal } from "./components/PaywallModal";
 import { UsageIndicator } from "./components/UsageIndicator";
@@ -7,7 +7,7 @@ import { PrivacyPolicy } from "./components/PrivacyPolicy";
 import { SecurityPolicy } from "./components/SecurityPolicy";
 import { PrivacyAgreement } from "./components/PrivacyAgreement";
 import { SecurityProvider, useSecurity } from "./contexts/SecurityContext";
-import { detectInvisibleCharacters, stripInvisibleCharacters } from "./utils/advancedInvisibleCharacters";
+import { stripInvisibleCharacters } from "./utils/advancedInvisibleCharacters";
 
 interface CleanOptions {
   removeInvisible: boolean;
@@ -34,11 +34,6 @@ interface CleanOptions {
   removeLeadingSpaces: boolean;
 }
 
-interface CheckboxProps {
-  label: string;
-  checked: boolean;
-  onChange: () => void;
-}
 
 interface StatsProps {
   input: string;
@@ -59,7 +54,7 @@ function AppContent() {
   const [showSecurity, setShowSecurity] = useState(false);
   const [showPrivacyAgreement, setShowPrivacyAgreement] = useState(false);
   const [paywallReason, setPaywallReason] = useState<'daily_limit' | 'text_length' | 'feature_required'>('daily_limit');
-  const { user, usage, recordCleaning, canClean, getRemainingCleanings, upgradeUser } = useUsage();
+  const { user, usage, recordCleaning, canClean, upgradeUser } = useUsage();
   const { hasAcceptedTerms, securitySettings } = useSecurity();
   
   const [opts, setOpts] = useState<CleanOptions>({
@@ -91,17 +86,14 @@ function AppContent() {
   }
 
   const cleaned = useMemo(() => {
-    if (!canClean(input.length)) {
-      return input; // Return original text if can't clean
-    }
-    
+    // Always clean the text - don't check limits here
     // Use advanced invisible character detection if enabled
     if (opts.removeInvisible && securitySettings.encryptionLevel === 'enhanced') {
       return stripInvisibleCharacters(cleanText(input, opts));
     }
     
     return cleanText(input, opts);
-  }, [input, opts, canClean, securitySettings]);
+  }, [input, opts, securitySettings]);
 
   const handleClean = () => {
     if (!canClean(input.length)) {
@@ -115,7 +107,11 @@ function AppContent() {
     }
     
     // Record the cleaning usage
-    recordCleaning(input.length);
+    const success = recordCleaning(input.length);
+    if (!success) {
+      setPaywallReason('daily_limit');
+      setShowPaywall(true);
+    }
   };
 
   const copyToClipboard = async () => {
@@ -231,8 +227,33 @@ function AppContent() {
         <div className="grid gap-6">
           <div className="grid gap-3">
             <div className="flex items-center justify-between">
-              <label className="text-sm uppercase tracking-wider text-neutral-400">Input</label>
+              <div className="flex items-center gap-3">
+                <label className="text-sm uppercase tracking-wider text-neutral-400">Input</label>
+                {user && (
+                  <div className="text-xs text-neutral-500">
+                    {user.tier === 'free' ? (
+                      <span className={input.length > 2000 ? 'text-red-400' : 'text-neutral-400'}>
+                        {input.length.toLocaleString()} / 2,000 chars
+                      </span>
+                    ) : (
+                      <span className={input.length > 1000000 ? 'text-red-400' : 'text-neutral-400'}>
+                        {input.length.toLocaleString()} / 1,000,000 chars
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
               <div className="flex gap-2">
+                <button
+                  onClick={handleClean}
+                  disabled={!input.trim() || !canClean(input.length)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500 text-white hover:bg-emerald-400 disabled:bg-neutral-600 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Clean
+                </button>
                 <button
                   onClick={() => { setInput(""); }}
                   className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500 text-white hover:bg-red-400 transition-colors text-sm font-medium animate-pulse"
@@ -367,14 +388,6 @@ export default function App() {
   );
 }
 
-function Check({ label, checked, onChange }: CheckboxProps) {
-  return (
-    <label className="flex items-center gap-3 p-3 rounded-xl bg-neutral-900 border border-neutral-800 hover:border-neutral-700 cursor-pointer select-none">
-      <input type="checkbox" className="size-4 accent-emerald-500" checked={checked} onChange={onChange} />
-      <span className="text-sm text-neutral-200">{label}</span>
-    </label>
-  );
-}
 
 interface OptionGroupProps {
   title: string;
@@ -431,11 +444,9 @@ function OptionGroup({ title, options, opts, toggle }: OptionGroupProps) {
 }
 
 function Stats({ input, output, opts }: StatsProps) {
-  const invCounts = useMemo(() => countInvisibles(input, opts), [input, opts]);
+  const invCounts = useMemo(() => countInvisibles(input), [input]);
   const removedChars = Math.max(0, input.length - output.length);
   
-  // Track previous values for color activation
-  const [prevValues, setPrevValues] = useState({ length: 0, removed: 0, types: 0 });
   
   // Calculate what was actually removed based on options
   const removedItems = useMemo(() => {
@@ -892,7 +903,7 @@ function cleanText(text: string, opts: CleanOptions): string {
   return t;
 }
 
-function countInvisibles(text: string, opts: CleanOptions) {
+function countInvisibles(text: string) {
   const c = {
     zwsp: 0,
     wj: 0,
