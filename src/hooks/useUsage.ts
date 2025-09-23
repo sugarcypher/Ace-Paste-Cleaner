@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { UsageStats, User, PRICING_TIERS } from '../types/pricing';
 import { subscriptionManager } from '../utils/subscriptionManager';
+import { useAuth } from '../contexts/AuthContext';
 
 const STORAGE_KEY = 'acepaste_user_data';
 const USAGE_KEY = 'acepaste_usage';
 
 export function useUsage() {
+  const { user: authUser, isAuthenticated } = useAuth();
   const [user, setUser] = useState<User | null>(null);
   const [usage, setUsage] = useState<UsageStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -14,22 +16,16 @@ export function useUsage() {
   useEffect(() => {
     const loadUserData = () => {
       try {
-        const storedUser = localStorage.getItem(STORAGE_KEY);
         const storedUsage = localStorage.getItem(USAGE_KEY);
         
-        // Check for active subscription first
-        const activeSubscription = subscriptionManager.getActiveSubscription();
-        const subscriptionTier = activeSubscription ? activeSubscription.tier : 'free';
-        
-        if (storedUser) {
-          const userData = JSON.parse(storedUser);
-          // Update tier if subscription is active
-          if (activeSubscription && userData.tier !== subscriptionTier) {
-            userData.tier = subscriptionTier;
-            userData.usage.currentTier = subscriptionTier;
-          }
-          setUser(userData);
+        if (isAuthenticated && authUser) {
+          // Use authenticated user
+          setUser(authUser);
         } else {
+          // Check for active subscription first
+          const activeSubscription = subscriptionManager.getActiveSubscription();
+          const subscriptionTier = activeSubscription ? activeSubscription.tier : 'free';
+          
           // Create anonymous user
           const anonymousUser: User = {
             id: `anon_${Date.now()}`,
@@ -43,7 +39,6 @@ export function useUsage() {
             }
           };
           setUser(anonymousUser);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(anonymousUser));
         }
 
         if (storedUsage) {
@@ -82,7 +77,7 @@ export function useUsage() {
     };
 
     loadUserData();
-  }, []);
+  }, [isAuthenticated, authUser]);
 
   // Reset daily usage if it's a new day
   useEffect(() => {

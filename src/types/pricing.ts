@@ -63,6 +63,26 @@ export const PRICING_TIERS: PricingTier[] = [
     }
   },
   {
+    id: 'admin',
+    name: 'Admin',
+    price: 0,
+    currency: 'USD',
+    interval: 'forever',
+    features: [
+      'Unlimited cleanings',
+      'Unlimited character limit',
+      'All premium features',
+      'Priority support',
+      'Admin access'
+    ],
+    limits: {
+      dailyCleanings: -1, // unlimited
+      maxTextLength: -1, // unlimited
+      advancedFeatures: true,
+      prioritySupport: true
+    }
+  },
+  {
     id: 'monthly',
     name: 'Monthly',
     price: 6.99,

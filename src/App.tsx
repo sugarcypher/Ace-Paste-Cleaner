@@ -9,6 +9,8 @@ import { PrivacyAgreement } from "./components/PrivacyAgreement";
 import { SecurityProvider, useSecurity } from "./contexts/SecurityContext";
 import { stripInvisibleCharacters } from "./utils/advancedInvisibleCharacters";
 import { GumroadWebhookHandler } from "./components/GumroadWebhookHandler";
+import { AuthProvider } from "./contexts/AuthContext";
+import { Header } from "./components/Header";
 
 interface CleanOptions {
   removeInvisible: boolean;
@@ -289,7 +291,11 @@ function AppContent() {
                 <label className="text-sm uppercase tracking-wider text-neutral-400">Input</label>
                 {user && (
                   <div className="text-xs text-neutral-500">
-                    {user.tier === 'free' ? (
+                    {user.tier === 'admin' ? (
+                      <span className="text-emerald-400">
+                        {input.length.toLocaleString()} chars (Unlimited)
+                      </span>
+                    ) : user.tier === 'free' ? (
                       <span className={input.length > 2000 ? 'text-red-400' : 'text-neutral-400'}>
                         {input.length.toLocaleString()} / 2,000 chars
                       </span>
@@ -1035,14 +1041,17 @@ function countInvisibles(text: string) {
 
 function App() {
   return (
-    <SecurityProvider>
-      <div className="min-h-screen bg-neutral-900 text-white">
-        <GumroadWebhookHandler />
-        <div className="container mx-auto px-4 py-8 max-w-6xl">
-          <AppContent />
+    <AuthProvider>
+      <SecurityProvider>
+        <div className="min-h-screen bg-neutral-900 text-white">
+          <GumroadWebhookHandler />
+          <Header />
+          <div className="container mx-auto px-4 py-8 max-w-6xl">
+            <AppContent />
+          </div>
         </div>
-      </div>
-    </SecurityProvider>
+      </SecurityProvider>
+    </AuthProvider>
   );
 }
 
